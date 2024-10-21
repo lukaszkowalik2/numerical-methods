@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/NUM1.dir/NUM1.cpp.o -o NUM1 
