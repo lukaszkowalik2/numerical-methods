@@ -1,24 +1,25 @@
 #include <Eigen/Dense>
+#include <iomanip>
 #include <iostream>
 #include <random>
 
 void solveAndAnalyze(const Eigen::MatrixXd& A, const Eigen::VectorXd& b, double perturbationNorm) {
   Eigen::VectorXd y = A.colPivHouseholderQr().solve(b);
+  std::cout << std::fixed << std::setprecision(10);
   std::cout << "Solution for A*y = b without perturbation:\n"
-            << y << "\n\n";
+            << y.transpose() << "\n\n";
 
-  Eigen::VectorXd delta_b = Eigen::VectorXd::Random(b.size());
-  delta_b = delta_b.normalized() * perturbationNorm;
+  Eigen::VectorXd delta_b = Eigen::VectorXd::Random(b.size()).normalized() * perturbationNorm;
   Eigen::VectorXd b_perturbed = b + delta_b;
 
   Eigen::VectorXd y_perturbed = A.colPivHouseholderQr().solve(b_perturbed);
   std::cout << "Solution for A*y = b + Δb (perturbed vector):\n"
-            << y_perturbed << "\n\n";
+            << y_perturbed.transpose() << "\n\n";
 
   Eigen::VectorXd difference = y_perturbed - y;
   std::cout << "Difference between perturbed and original solution:\n"
-            << difference << "\n\n";
-  std::cout << "Norm of the difference: " << difference.norm() << "\n\n";
+            << difference.transpose() << "\n";
+  std::cout << "Norm of the difference: " << std::scientific << difference.norm() << "\n\n";
 }
 
 int main() {
