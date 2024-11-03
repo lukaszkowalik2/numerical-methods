@@ -114,7 +114,20 @@
     "ratio": "cpp",
     "semaphore": "cpp",
     "stop_token": "cpp",
-    "thread": "cpp"
+    "thread": "cpp",
+    "charconv": "cpp",
+    "chrono": "cpp",
+    "condition_variable": "cpp",
+    "list": "cpp",
+    "unordered_set": "cpp",
+    "hash_map": "cpp",
+    "format": "cpp",
+    "future": "cpp",
+    "mutex": "cpp",
+    "span": "cpp",
+    "cinttypes": "cpp",
+    "valarray": "cpp",
+    "variant": "cpp"
   },
   "C_Cpp.errorSquiggles": "enabled"
 }
