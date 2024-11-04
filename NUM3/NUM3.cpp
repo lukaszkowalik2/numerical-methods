@@ -46,6 +46,7 @@ void printMatrix(const std::vector<std::vector<double>>& matrix) {
 void gaussElimination(const std::vector<std::vector<double>>& A, const std::vector<double>& x, std::vector<double>& y, int N) {
   std::vector<std::vector<double>> augmented(N, std::vector<double>(N + 1, 0.0));
 
+  // Initialize augmented matrix with matrix A and vector x
   for (int i = 0; i < N; ++i) {
     for (int j = 0; j < N; ++j) {
       augmented[i][j] = A[i][j];
@@ -53,6 +54,7 @@ void gaussElimination(const std::vector<std::vector<double>>& A, const std::vect
     augmented[i][N] = x[i];
   }
 
+  // Forward elimination
   for (int i = 0; i < N; ++i) {
     for (int j = i + 1; j < N; ++j) {
       double factor = augmented[j][i] / augmented[i][i];
@@ -62,6 +64,7 @@ void gaussElimination(const std::vector<std::vector<double>>& A, const std::vect
     }
   }
 
+  // Back substitution
   for (int i = N - 1; i >= 0; --i) {
     y[i] = augmented[i][N];
     for (int j = i + 1; j < N; ++j) {
@@ -72,23 +75,42 @@ void gaussElimination(const std::vector<std::vector<double>>& A, const std::vect
 }
 
 void thomasAlgorithm(const std::vector<std::vector<double>>& A, const std::vector<double>& x, std::vector<double>& y, int N) {
-  std::vector<double> a(N, 0.0), b(N, 0.0), c(N, 0.0), d(x);
+  std::vector<double> a(N, 0.0);  // Sub-diagonal (below the main diagonal)
+  std::vector<double> b(N, 0.0);  // Main diagonal
+  std::vector<double> c(N, 0.0);  // First super-diagonal (above the main diagonal)
+  std::vector<double> d(N, 0.0);  // Second super-diagonal
+  std::vector<double> xCopy(x);   // Right-hand side (copy of vector x)
 
   for (int i = 0; i < N; ++i) {
-    b[i] = A[i][i];
-    if (i > 0) a[i] = A[i][i - 1];
-    if (i < N - 1) c[i] = A[i][i + 1];
+    b[i] = A[i][i];                     // Main diagonal
+    if (i > 0) a[i] = A[i][i - 1];      // Sub-diagonal
+    if (i < N - 1) c[i] = A[i][i + 1];  // First super-diagonal
+    if (i < N - 2) d[i] = A[i][i + 2];  // Second super-diagonal
   }
 
+  // Forward elimination
   for (int i = 1; i < N; ++i) {
     double m = a[i] / b[i - 1];
     b[i] -= m * c[i - 1];
-    d[i] -= m * d[i - 1];
+    xCopy[i] -= m * xCopy[i - 1];
+
+    if (i < N - 1) {
+      c[i] -= m * d[i - 1];
+    }
   }
 
-  y[N - 1] = d[N - 1] / b[N - 1];
-  for (int i = N - 2; i >= 0; --i) {
-    y[i] = (d[i] - c[i] * y[i + 1]) / b[i];
+  for (int i = 2; i < N; ++i) {
+    double m = d[i - 2] / b[i - 2];
+    b[i] -= m * c[i - 1];
+    xCopy[i] -= m * xCopy[i - 2];
+  }
+
+  // Back substitution
+  y.resize(N, 0.0);
+  y[N - 1] = xCopy[N - 1] / b[N - 1];
+  y[N - 2] = (xCopy[N - 2] - c[N - 2] * y[N - 1]) / b[N - 2];
+  for (int i = N - 3; i >= 0; --i) {
+    y[i] = (xCopy[i] - c[i] * y[i + 1] - d[i] * y[i + 2]) / b[i];
   }
 }
 
@@ -132,13 +154,11 @@ void bandLU(const std::vector<std::vector<double>>& A, const std::vector<double>
 }
 
 double calculateDeterminant(const std::vector<std::vector<double>>& A, int n) {
-  // Create diagonal vectors for LU decomposition
   std::vector<double> a(n, 0.0);  // Sub-diagonal (below the main diagonal)
   std::vector<double> b(n, 0.0);  // Main diagonal
   std::vector<double> c(n, 0.0);  // First super-diagonal (above the main diagonal)
   std::vector<double> d(n, 0.0);  // Second super-diagonal
 
-  // Extract diagonals from the full matrix A
   for (int i = 0; i < n; ++i) {
     b[i] = A[i][i];                     // Main diagonal
     if (i > 0) a[i] = A[i][i - 1];      // Sub-diagonal
