@@ -1,4 +1,5 @@
 #include <Eigen/Dense>
+#include <chrono>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -24,16 +25,6 @@ std::vector<double> createVectorB(int N) {
   return b;
 }
 
-void printVector(const std::vector<double>& vec) {
-  for (size_t i = 0; i < vec.size(); ++i) {
-    std::cout << vec[i];
-    if (i < vec.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-}
-
 Eigen::MatrixXd convertToEigen(const std::vector<std::vector<double>>& matrix) {
   int rows = matrix.size();
   int cols = matrix[0].size();
@@ -47,31 +38,52 @@ Eigen::MatrixXd convertToEigen(const std::vector<std::vector<double>>& matrix) {
   return eigenMatrix;
 }
 
-std::vector<double> jacobiMethod(const std::vector<std::vector<double>>& A, const std::vector<double>& b, int maxIter, double tol) {
-  int N = A.size();
-  std::vector<double> x(N, 0.0), x_new(N, 0.0);
+double calculateError(const std::vector<double>& x1, const std::vector<double>& x2) {
+  double error = 0.0;
+  for (size_t i = 0; i < x1.size(); ++i) {
+    error = std::max(error, std::fabs(x1[i] - x2[i]));
+  }
+  return error;
+}
 
-  for (int iter = 0; iter < maxIter; ++iter) {
-    for (int i = 0; i < N; ++i) {
-      double sum = 0.0;
-      for (int j = 0; j < N; ++j) {
+void printVector(const std::vector<double>& vec, const std::string& name) {
+  std::cout << name << ": [";
+  for (size_t i = 0; i < vec.size(); ++i) {
+    std::cout << vec[i];
+    if (i < vec.size() - 1) std::cout << ", ";
+  }
+  std::cout << "]\n";
+}
+
+std::vector<double> jacobiMethod(const std::vector<std::vector<double>>& A, const std::vector<double>& b,
+                                 int maxIter = 1000, double tol = 1e-10) {
+  int N = A.size();
+  std::vector<double> x(N, 0.0);
+  std::vector<double> x_new(N);
+  double max_diff;
+
+  for (int iter = 0; iter < maxIter; iter++) {
+    max_diff = 0.0;
+
+    for (int i = 0; i < N; i++) {
+      double sum = b[i];
+      for (int j = 0; j < N; j++) {
         if (j != i) {
-          sum += A[i][j] * x[j];
+          sum -= A[i][j] * x[j];
         }
       }
-      x_new[i] = (b[i] - sum) / A[i][i];
+      x_new[i] = sum / A[i][i];
+      max_diff = std::max(max_diff, std::abs(x_new[i] - x[i]));
     }
 
-    double error = 0.0;
-    for (int i = 0; i < N; ++i) {
-      error += std::fabs(x_new[i] - x[i]);
+    for (int i = 0; i < N; i++) {
+      x[i] = x_new[i];
     }
-    if (error < tol) break;
 
-    x = x_new;
+    if (max_diff <= tol) {
+      break;
+    }
   }
-  std::cout << "Wynik z metodą Jacobiego " << std::endl;
-  printVector(x);
 
   return x;
 }
@@ -90,40 +102,47 @@ std::vector<double> gaussSeidelMethod(const std::vector<std::vector<double>>& A,
         }
       }
       double x_new = (b[i] - sum) / A[i][i];
-      error += std::fabs(x_new - x[i]);
+      error = std::max(error, std::fabs(x_new - x[i]));
       x[i] = x_new;
     }
     if (error < tol) break;
   }
-  std::cout << "Wynik z metodą Gauss Seidel: " << std::endl;
-  printVector(x);
 
   return x;
 }
 
 std::vector<double> solveWithEigen(const std::vector<std::vector<double>>& matrix, const std::vector<double>& b) {
-  const Eigen::MatrixXd A = convertToEigen(matrix);
-
+  Eigen::MatrixXd A = convertToEigen(matrix);
   Eigen::VectorXd bEigen = Eigen::VectorXd::Map(b.data(), b.size());
 
-  Eigen::VectorXd y = A.fullPivLu().solve(bEigen);
+  Eigen::VectorXd solution = A.fullPivLu().solve(bEigen);
 
-  std::vector<double> x = std::vector<double>(y.data(), y.data() + y.size());
+  return std::vector<double>(solution.data(), solution.data() + solution.size());
+}
 
-  std::cout << "Wynik z metodą Eigen: " << std::endl;
-  printVector(x);
+double measureJacobiTime(const std::vector<std::vector<double>>& A, const std::vector<double>& b, int maxIter, double tol) {
+  auto start = std::chrono::high_resolution_clock::now();
+  jacobiMethod(A, b, maxIter, tol);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = end - start;
+  return elapsed.count();
+}
 
-  return x;
+double measureGaussSeidelTime(const std::vector<std::vector<double>>& A, const std::vector<double>& b, int maxIter, double tol) {
+  auto start = std::chrono::high_resolution_clock::now();
+  gaussSeidelMethod(A, b, maxIter, tol);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = end - start;
+  return elapsed.count();
 }
 
 int main() {
   int N = 200;
+  double d1 = 5.0;
+  double d2 = 0.5;
+  double d3 = 1.201;
 
-  double d1 = 2.0;
-  double d2 = 0.8;
-  double d3 = 1.1;
-
-  int maxIter = 1000;
+  int maxIter = 50000;
   double tol = 1e-6;
 
   auto A1 = createMatrix(N, d1);
@@ -131,30 +150,55 @@ int main() {
   auto A3 = createMatrix(N, d3);
   auto b = createVectorB(N);
 
-  // std::vector<double> exactSolution(N);
-  // for (int i = 0; i < N; ++i) {
-  //   exactSolution[i] = (i + 1) / d;
-  // }
+  Eigen::VectorXd eigenSolution1 = convertToEigen(A1).fullPivLu().solve(Eigen::VectorXd::Map(b.data(), b.size()));
+  std::vector<double> eigenVector1(eigenSolution1.data(), eigenSolution1.data() + eigenSolution1.size());
+
+  double jacobiTime1 = measureJacobiTime(A1, b, maxIter, tol);
+  double gaussSeidelTime1 = measureGaussSeidelTime(A1, b, maxIter, tol);
 
   auto jacobiSolution1 = jacobiMethod(A1, b, maxIter, tol);
   auto gaussSeidelSolution1 = gaussSeidelMethod(A1, b, maxIter, tol);
-  auto eigenSolution1 = solveWithEigen(A1, b);
-  std::cout << "-----------------------------------" << std::endl;
+
+  std::cout << "==== d = " << d1 << " (silnie dominujące) ====\n";
+  std::cout << "Czas Jacobiego: " << jacobiTime1 << " s\n";
+  std::cout << "Czas Gaussa-Seidela: " << gaussSeidelTime1 << " s\n";
+  std::cout << "Błąd Jacobiego: " << calculateError(jacobiSolution1, eigenVector1) << "\n";
+  std::cout << "Błąd Gaussa-Seidela: " << calculateError(gaussSeidelSolution1, eigenVector1) << "\n";
+
+  printVector(jacobiSolution1, "Wynik Jacobiego");
+  printVector(gaussSeidelSolution1, "Wynik Gausa");
+
   auto jacobiSolution2 = jacobiMethod(A2, b, maxIter, tol);
   auto gaussSeidelSolution2 = gaussSeidelMethod(A2, b, maxIter, tol);
   auto eigenSolution2 = solveWithEigen(A2, b);
-  std::cout << "-----------------------------------" << std::endl;
+  std::vector<double> eigenVector2(eigenSolution2.begin(), eigenSolution2.end());
+
+  double jacobiTime2 = measureJacobiTime(A2, b, maxIter, tol);
+  double gaussSeidelTime2 = measureGaussSeidelTime(A2, b, maxIter, tol);
+
+  std::cout << "\n==== d = " << d2 << " (brak dominacji) ====\n";
+  std::cout << "Czas Jacobiego: " << jacobiTime2 << " s\n";
+  std::cout << "Czas Gaussa-Seidela: " << gaussSeidelTime2 << " s\n";
+  std::cout << "Błąd Jacobiego: " << calculateError(jacobiSolution2, eigenVector2) << "\n";
+  std::cout << "Błąd Gaussa-Seidela: " << calculateError(gaussSeidelSolution2, eigenVector2) << "\n";
+  printVector(jacobiSolution2, "Wynik Jacobiego");
+  printVector(gaussSeidelSolution2, "Wynik Gausa");
+
   auto jacobiSolution3 = jacobiMethod(A3, b, maxIter, tol);
   auto gaussSeidelSolution3 = gaussSeidelMethod(A3, b, maxIter, tol);
   auto eigenSolution3 = solveWithEigen(A3, b);
+  std::vector<double> eigenVector3(eigenSolution3.begin(), eigenSolution3.end());
 
-  // std::cout << "Różnice względem dokładnego rozwiązania:\n";
-  // std::cout << "Index\tJacobi\t\tGauss-Seidel\n";
-  // for (int i = 0; i < N; ++i) {
-  //   std::cout << i << "\t"
-  //             << std::fabs(jacobiSolution[i] - exactSolution[i]) << "\t"
-  //             << std::fabs(gaussSeidelSolution[i] - exactSolution[i]) << "\n";
-  // }
+  double jacobiTime3 = measureJacobiTime(A3, b, maxIter, tol);
+  double gaussSeidelTime3 = measureGaussSeidelTime(A3, b, maxIter, tol);
+
+  std::cout << "\n==== d = " << d3 << " (blisko krytycznego punktu) ====\n";
+  std::cout << "Czas Jacobiego: " << jacobiTime3 << " s\n";
+  std::cout << "Czas Gaussa-Seidela: " << gaussSeidelTime3 << " s\n";
+  std::cout << "Błąd Jacobiego: " << calculateError(jacobiSolution3, eigenVector3) << "\n";
+  std::cout << "Błąd Gaussa-Seidela: " << calculateError(gaussSeidelSolution3, eigenVector3) << "\n";
+  printVector(jacobiSolution3, "Wynik Jacobiego");
+  printVector(gaussSeidelSolution3, "Wynik Gausa");
 
   return 0;
 }
