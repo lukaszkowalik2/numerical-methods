@@ -20,6 +20,6 @@ run: $(BUILD_DIR)/$(TARGET)
 	./$(BUILD_DIR)/$(TARGET)
 
 zip:
-	zip -r projekt.zip * -x "build/*" ".vscode/*"
+	zip -r NUM4.zip * -x "build/*" ".vscode/*"
 
 .PHONY: all clean run zip
