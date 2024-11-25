@@ -19,4 +19,7 @@ clean:
 run: $(BUILD_DIR)/$(TARGET)
 	./$(BUILD_DIR)/$(TARGET)
 
-.PHONY: all clean run
+zip:
+	zip -r projekt.zip * -x "build/*" ".vscode/*"
+
+.PHONY: all clean run zip
