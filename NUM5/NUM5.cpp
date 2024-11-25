@@ -1,6 +1,7 @@
 #include <Eigen/Dense>
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -55,11 +56,14 @@ void printVector(const std::vector<double>& vec, const std::string& name) {
   std::cout << "]\n";
 }
 
-std::vector<double> jacobiMethod(const std::vector<std::vector<double>>& A, const std::vector<double>& b,
-                                 int maxIter = 1000, double tol = 1e-10) {
+std::pair<std::vector<double>, std::vector<double>> jacobiMethod(const std::vector<std::vector<double>>& A,
+                                                                 const std::vector<double>& b,
+                                                                 const std::vector<double>& exact_solution,
+                                                                 int maxIter = 1000, double tol = 1e-10) {
   int N = A.size();
   std::vector<double> x(N, 0.0);
   std::vector<double> x_new(N);
+  std::vector<double> errors;
   double max_diff;
 
   for (int iter = 0; iter < maxIter; iter++) {
@@ -80,17 +84,23 @@ std::vector<double> jacobiMethod(const std::vector<std::vector<double>>& A, cons
       x[i] = x_new[i];
     }
 
+    errors.push_back(calculateError(x, exact_solution));
+
     if (max_diff <= tol) {
       break;
     }
   }
 
-  return x;
+  return {x, errors};
 }
 
-std::vector<double> gaussSeidelMethod(const std::vector<std::vector<double>>& A, const std::vector<double>& b, int maxIter, double tol) {
+std::pair<std::vector<double>, std::vector<double>> gaussSeidelMethod(const std::vector<std::vector<double>>& A,
+                                                                      const std::vector<double>& b,
+                                                                      const std::vector<double>& exact_solution,
+                                                                      int maxIter, double tol) {
   int N = A.size();
   std::vector<double> x(N, 0.0);
+  std::vector<double> errors;
 
   for (int iter = 0; iter < maxIter; ++iter) {
     double error = 0.0;
@@ -105,10 +115,13 @@ std::vector<double> gaussSeidelMethod(const std::vector<std::vector<double>>& A,
       error = std::max(error, std::fabs(x_new - x[i]));
       x[i] = x_new;
     }
+
+    errors.push_back(calculateError(x, exact_solution));
+
     if (error < tol) break;
   }
 
-  return x;
+  return {x, errors};
 }
 
 std::vector<double> solveWithEigen(const std::vector<std::vector<double>>& matrix, const std::vector<double>& b) {
@@ -120,20 +133,37 @@ std::vector<double> solveWithEigen(const std::vector<std::vector<double>>& matri
   return std::vector<double>(solution.data(), solution.data() + solution.size());
 }
 
-double measureJacobiTime(const std::vector<std::vector<double>>& A, const std::vector<double>& b, int maxIter, double tol) {
-  auto start = std::chrono::high_resolution_clock::now();
-  jacobiMethod(A, b, maxIter, tol);
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-  return elapsed.count();
+void saveErrorsToFile(const std::vector<double>& jacobi_errors,
+                      const std::vector<double>& gauss_errors,
+                      const std::string& filename) {
+  std::ofstream file(filename);
+  file << "# Iteration Jacobi Gauss-Seidel\n";
+  for (size_t i = 0; i < std::max(jacobi_errors.size(), gauss_errors.size()); ++i) {
+    file << i << " ";
+    if (i < jacobi_errors.size())
+      file << std::log10(jacobi_errors[i]) << " ";
+    else
+      file << "- ";
+    if (i < gauss_errors.size())
+      file << std::log10(gauss_errors[i]) << "\n";
+    else
+      file << "-\n";
+  }
+  file.close();
 }
 
-double measureGaussSeidelTime(const std::vector<std::vector<double>>& A, const std::vector<double>& b, int maxIter, double tol) {
-  auto start = std::chrono::high_resolution_clock::now();
-  gaussSeidelMethod(A, b, maxIter, tol);
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-  return elapsed.count();
+void createGnuplotScript(const std::string& datafile, const std::string& plotfile, double d) {
+  std::ofstream script("plot_script.gnu");
+  script << "set terminal svg\n";
+  script << "set output '" << plotfile << ".svg'\n";
+  script << "set title 'Błąd w kolejnych iteracjach (d = " << d << ")'\n";
+  script << "set xlabel 'Iteracja'\n";
+  script << "set ylabel 'log10(Błąd)'\n";
+  script << "plot '" << datafile << "' using 1:2 title 'Jacobi' with lines, \\\n";
+  script << "     '" << datafile << "' using 1:3 title 'Gauss-Seidel' with lines\n";
+  script.close();
+
+  system("gnuplot plot_script.gnu");
 }
 
 int main() {
@@ -150,55 +180,43 @@ int main() {
   auto A3 = createMatrix(N, d3);
   auto b = createVectorB(N);
 
-  Eigen::VectorXd eigenSolution1 = convertToEigen(A1).fullPivLu().solve(Eigen::VectorXd::Map(b.data(), b.size()));
-  std::vector<double> eigenVector1(eigenSolution1.data(), eigenSolution1.data() + eigenSolution1.size());
+  // Rozwiązanie dokładne dla wszystkich przypadków
+  auto exact_solution1 = solveWithEigen(A1, b);
+  auto exact_solution2 = solveWithEigen(A2, b);
+  auto exact_solution3 = solveWithEigen(A3, b);
 
-  double jacobiTime1 = measureJacobiTime(A1, b, maxIter, tol);
-  double gaussSeidelTime1 = measureGaussSeidelTime(A1, b, maxIter, tol);
+  // Przypadek 1 (d = 5.0)
+  auto [jacobiSolution1, jacobi_errors1] = jacobiMethod(A1, b, exact_solution1, maxIter, tol);
+  auto [gaussSeidelSolution1, gauss_errors1] = gaussSeidelMethod(A1, b, exact_solution1, maxIter, tol);
 
-  auto jacobiSolution1 = jacobiMethod(A1, b, maxIter, tol);
-  auto gaussSeidelSolution1 = gaussSeidelMethod(A1, b, maxIter, tol);
+  saveErrorsToFile(jacobi_errors1, gauss_errors1, "errors_d1.dat");
+  createGnuplotScript("errors_d1.dat", "convergence_d1", d1);
 
   std::cout << "==== d = " << d1 << " (silnie dominujące) ====\n";
-  std::cout << "Czas Jacobiego: " << jacobiTime1 << " s\n";
-  std::cout << "Czas Gaussa-Seidela: " << gaussSeidelTime1 << " s\n";
-  std::cout << "Błąd Jacobiego: " << calculateError(jacobiSolution1, eigenVector1) << "\n";
-  std::cout << "Błąd Gaussa-Seidela: " << calculateError(gaussSeidelSolution1, eigenVector1) << "\n";
+  std::cout << "Błąd końcowy Jacobiego: " << jacobi_errors1.back() << "\n";
+  std::cout << "Błąd końcowy Gaussa-Seidela: " << gauss_errors1.back() << "\n";
 
-  printVector(jacobiSolution1, "Wynik Jacobiego");
-  printVector(gaussSeidelSolution1, "Wynik Gausa");
+  // Przypadek 2 (d = 0.5)
+  auto [jacobiSolution2, jacobi_errors2] = jacobiMethod(A2, b, exact_solution2, maxIter, tol);
+  auto [gaussSeidelSolution2, gauss_errors2] = gaussSeidelMethod(A2, b, exact_solution2, maxIter, tol);
 
-  auto jacobiSolution2 = jacobiMethod(A2, b, maxIter, tol);
-  auto gaussSeidelSolution2 = gaussSeidelMethod(A2, b, maxIter, tol);
-  auto eigenSolution2 = solveWithEigen(A2, b);
-  std::vector<double> eigenVector2(eigenSolution2.begin(), eigenSolution2.end());
-
-  double jacobiTime2 = measureJacobiTime(A2, b, maxIter, tol);
-  double gaussSeidelTime2 = measureGaussSeidelTime(A2, b, maxIter, tol);
+  saveErrorsToFile(jacobi_errors2, gauss_errors2, "errors_d2.dat");
+  createGnuplotScript("errors_d2.dat", "convergence_d2", d2);
 
   std::cout << "\n==== d = " << d2 << " (brak dominacji) ====\n";
-  std::cout << "Czas Jacobiego: " << jacobiTime2 << " s\n";
-  std::cout << "Czas Gaussa-Seidela: " << gaussSeidelTime2 << " s\n";
-  std::cout << "Błąd Jacobiego: " << calculateError(jacobiSolution2, eigenVector2) << "\n";
-  std::cout << "Błąd Gaussa-Seidela: " << calculateError(gaussSeidelSolution2, eigenVector2) << "\n";
-  printVector(jacobiSolution2, "Wynik Jacobiego");
-  printVector(gaussSeidelSolution2, "Wynik Gausa");
+  std::cout << "Błąd końcowy Jacobiego: " << jacobi_errors2.back() << "\n";
+  std::cout << "Błąd końcowy Gaussa-Seidela: " << gauss_errors2.back() << "\n";
 
-  auto jacobiSolution3 = jacobiMethod(A3, b, maxIter, tol);
-  auto gaussSeidelSolution3 = gaussSeidelMethod(A3, b, maxIter, tol);
-  auto eigenSolution3 = solveWithEigen(A3, b);
-  std::vector<double> eigenVector3(eigenSolution3.begin(), eigenSolution3.end());
+  // Przypadek 3 (d = 1.201)
+  auto [jacobiSolution3, jacobi_errors3] = jacobiMethod(A3, b, exact_solution3, maxIter, tol);
+  auto [gaussSeidelSolution3, gauss_errors3] = gaussSeidelMethod(A3, b, exact_solution3, maxIter, tol);
 
-  double jacobiTime3 = measureJacobiTime(A3, b, maxIter, tol);
-  double gaussSeidelTime3 = measureGaussSeidelTime(A3, b, maxIter, tol);
+  saveErrorsToFile(jacobi_errors3, gauss_errors3, "errors_d3.dat");
+  createGnuplotScript("errors_d3.dat", "convergence_d3", d3);
 
   std::cout << "\n==== d = " << d3 << " (blisko krytycznego punktu) ====\n";
-  std::cout << "Czas Jacobiego: " << jacobiTime3 << " s\n";
-  std::cout << "Czas Gaussa-Seidela: " << gaussSeidelTime3 << " s\n";
-  std::cout << "Błąd Jacobiego: " << calculateError(jacobiSolution3, eigenVector3) << "\n";
-  std::cout << "Błąd Gaussa-Seidela: " << calculateError(gaussSeidelSolution3, eigenVector3) << "\n";
-  printVector(jacobiSolution3, "Wynik Jacobiego");
-  printVector(gaussSeidelSolution3, "Wynik Gausa");
+  std::cout << "Błąd końcowy Jacobiego: " << jacobi_errors3.back() << "\n";
+  std::cout << "Błąd końcowy Gaussa-Seidela: " << gauss_errors3.back() << "\n";
 
   return 0;
 }
