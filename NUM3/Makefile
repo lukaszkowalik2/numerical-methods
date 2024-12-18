@@ -1,7 +1,7 @@
 TARGET = build/NUM3
 TARGET_TIMED = build/NUM3_timed
 CXX = g++
-CXXFLAGS = -I ./lib/eigen-3.4.0 -O2 -std=c++11
+CXXFLAGS = -I /usr/include/eigen3 -O2 -std=c++11
 
 BUILD_DIR = build
 SRC = NUM3.cpp
