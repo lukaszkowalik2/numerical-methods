@@ -4,7 +4,7 @@ BUILD_DIR = build
 SRC = NUM2.cpp
 
 CXX = g++
-CXXFLAGS = -I ./lib/eigen-3.4.0 -O2 -std=c++11
+CXXFLAGS = -I /usr/include/eigen3 -O2 -std=c++11
 
 $(BUILD_DIR)/$(TARGET): $(SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$(TARGET) $(SRC)

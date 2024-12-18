@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -O2 -I./lib/eigen-3.4.0
+CXXFLAGS = -I /usr/include/eigen3 -O2 -std=c++11
 TARGET = NUM4
 SRC = NUM4.cpp
 OBJ = $(SRC:.cpp=.o)
