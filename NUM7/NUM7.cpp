@@ -22,7 +22,7 @@ double f2(double x) {
 }
 
 double f3(double x) {
-  return std::exp(-x * x);
+  return -std::log(std::abs(std::sin(M_PI * x) + 0.1)) / 4.0;
 }
 
 double lagrangeInterpolation(double x, std::vector<double> &xPoints, std::vector<double> &yPoints) {
@@ -94,14 +94,11 @@ double calculateSpline(double x, std::vector<double> &xPoints, std::vector<std::
 }
 
 void task(const std::string &funcName, int N) {
-  // Create charts directory if it doesn't exist
-  std::filesystem::create_directory("charts");
+  std::string outputDir = "output";
+  std::filesystem::create_directories(outputDir);
 
   static std::map<std::string, std::function<double(double)>> functions = {
-      {"y", y},
-      {"f1", f1},
-      {"f2", f2},
-      {"f3", f3}};
+      {"y", y}, {"f1", f1}, {"f2", f2}, {"f3", f3}};
 
   if (functions.find(funcName) == functions.end()) {
     std::cerr << "Unknown function name: " << funcName << std::endl;
@@ -112,79 +109,90 @@ void task(const std::string &funcName, int N) {
   std::vector<double> xPoints(N), yPoints(N);
   for (int i = 0; i < N; i++) {
     double t = i / double(N - 1);
-    double x = -1.0 + 2.0 * t;
-    xPoints[i] = x;
-    yPoints[i] = func(x);
+    xPoints[i] = -1.0 + 2.0 * t;
+    yPoints[i] = func(xPoints[i]);
   }
 
-  auto splineCoefficients = cubicSpline(xPoints, yPoints, N);
+  auto splineCoeff = cubicSpline(xPoints, yPoints, N);
 
-  int M = 200;
-  std::string csvFile = "charts/results_" + funcName + "_" + std::to_string(N) + ".csv";
-  std::ofstream fout(csvFile);
-  fout << "# x, f(x), Lagrange, errLag, Spline, errSpl\n";
+  std::ofstream lagrangeFile(outputDir + "/lagrange_" + funcName + "_" + std::to_string(N) + ".dat");
+  std::ofstream splineFile(outputDir + "/spline_" + funcName + "_" + std::to_string(N) + ".dat");
+  std::ofstream exactFile(outputDir + "/exact_" + funcName + "_" + std::to_string(N) + ".dat");
+  std::ofstream errorFile(outputDir + "/errors_" + funcName + "_" + std::to_string(N) + ".dat");
 
-  std::vector<double> X(M), F(M), FLag(M), FSpl(M);
+  for (double x = -1.0; x <= 1.0; x += 0.001) {
+    double exact = func(x);
+    double lagrange = lagrangeInterpolation(x, xPoints, yPoints);
+    double spline = calculateSpline(x, xPoints, splineCoeff, N);
 
-  for (int i = 0; i < M; i++) {
-    double t = i / double(M - 1);
-    double x = -1.0 + 2.0 * t;
-    double fExact = func(x);
-    double fLag = lagrangeInterpolation(x, xPoints, yPoints);
-    double fSpl = calculateSpline(x, xPoints, splineCoefficients, N);
-    double errLag = std::fabs(fExact - fLag);
-    double errSpl = std::fabs(fExact - fSpl);
-    fout << x << ","
-         << fExact << ","
-         << fLag << ","
-         << errLag << ","
-         << fSpl << ","
-         << errSpl << "\n";
-    X[i] = x;
-    F[i] = fExact;
-    FLag[i] = fLag;
-    FSpl[i] = fSpl;
-  }
-  fout.close();
-
-  std::cout << "Data saved to " << csvFile << std::endl;
-
-  std::string gpFile = "charts/plot_" + funcName + "_" + std::to_string(N) + ".gp";
-  std::string svgFile = "charts/plot_" + funcName + "_" + std::to_string(N) + ".svg";
-  {
-    std::ofstream gp(gpFile);
-    gp << "set terminal svg size 1200,800 enhanced font 'Arial,12'\n";
-    gp << "set output \"" << svgFile << "\"\n";
-    gp << "set title \"Interpolation of " << funcName
-       << " with N=" << N << "\" font 'Arial,14'\n";
-    gp << "set xlabel \"x\" font 'Arial,12'\n";
-    gp << "set ylabel \"f(x)\" font 'Arial,12'\n";
-    gp << "set grid lw 1\n";
-    gp << "set key outside right\n";
-    gp << "set style line 1 lc rgb '#0060ad' lt 1 lw 2\n";
-    gp << "set style line 2 lc rgb '#dd181f' lt 1 lw 2\n";
-    gp << "set style line 3 lc rgb '#00cc00' lt 1 lw 2\n";
-    gp << "plot \"" << csvFile << "\" using 1:2 with lines ls 1 title 'Exact', \\\n"
-       << "     \"" << csvFile << "\" using 1:3 with lines ls 2 title 'Lagrange', \\\n"
-       << "     \"" << csvFile << "\" using 1:5 with lines ls 3 title 'Spline'\n";
-    gp << "unset output\n";
-    gp << "exit\n";
+    exactFile << std::scientific << x << " " << exact << "\n";
+    lagrangeFile << std::scientific << x << " " << lagrange << "\n";
+    splineFile << std::scientific << x << " " << spline << "\n";
+    errorFile << std::scientific << x << " "
+              << std::abs(lagrange - exact) << " "
+              << std::abs(spline - exact) << "\n";
   }
 
-  std::string cmd = "gnuplot " + gpFile;
-  int ret = system(cmd.c_str());
-  if (ret != 0) {
-    std::cerr << "Warning: gnuplot command failed or not found.\n";
-  } else {
-    std::cout << "SVG plot generated: " << svgFile << std::endl;
-    std::filesystem::remove(gpFile);
+  std::ofstream pointsFile(outputDir + "/points_" + funcName + "_" + std::to_string(N) + ".dat");
+  for (int i = 0; i < N; i++) {
+    pointsFile << std::scientific << xPoints[i] << " " << yPoints[i] << "\n";
   }
+
+  lagrangeFile.close();
+  splineFile.close();
+  exactFile.close();
+  errorFile.close();
+  pointsFile.close();
+  std::ofstream plotScript(outputDir + "/plot_" + funcName + "_" + std::to_string(N) + ".gnu");
+  plotScript << "set terminal svg enhanced size 800,600\n";
+  plotScript << "set output 'interpolation_" << funcName << "_" << N << ".svg'\n";
+  plotScript << "set title 'Interpolation for " << funcName << " (N=" << N << ")'\n";
+  plotScript << "set xlabel 'x'\n";
+  plotScript << "set ylabel 'y'\n";
+  plotScript << "set grid\n";
+
+  if ((funcName == "y" && N == 30) || (funcName == "f3" && (N == 20 || N == 30))) {
+    plotScript << "set yrange [-2:2]\n";
+  }
+
+  plotScript << "plot 'exact_" << funcName << "_" << N << ".dat' w l title 'Exact', \\\n"
+             << "     'lagrange_" << funcName << "_" << N << ".dat' w l title 'Lagrange', \\\n"
+             << "     'spline_" << funcName << "_" << N << ".dat' w l title 'Spline', \\\n"
+             << "     'points_" << funcName << "_" << N << ".dat' w p pt 7 title 'Points'\n";
+  plotScript.close();
+
+  std::ofstream errorPlotScript(outputDir + "/plot_error_" + funcName + "_" + std::to_string(N) + ".gnu");
+  errorPlotScript << "set terminal svg enhanced size 800,600\n";
+  errorPlotScript << "set output 'errors_" << funcName << "_" << N << ".svg'\n";
+  errorPlotScript << "set title 'Interpolation Errors for " << funcName << " (N=" << N << ")'\n";
+  errorPlotScript << "set xlabel 'x'\n";
+  errorPlotScript << "set ylabel 'Error'\n";
+  errorPlotScript << "set grid\n";
+  errorPlotScript << "set logscale y\n";
+  errorPlotScript << "plot 'errors_" << funcName << "_" << N << ".dat' using 1:2 w l title 'Lagrange Error', \\\n"
+                  << "     'errors_" << funcName << "_" << N << ".dat' using 1:3 w l title 'Spline Error'\n";
+  errorPlotScript.close();
+
+  std::string currentDir = std::filesystem::current_path().string();
+  system(("cd " + currentDir + "/" + outputDir + " && gnuplot plot_" + funcName + "_" + std::to_string(N) + ".gnu").c_str());
+  system(("cd " + currentDir + "/" + outputDir + " && gnuplot plot_error_" + funcName + "_" + std::to_string(N) + ".gnu").c_str());
 }
 
 int main() {
-  task("f1", 10);
-  task("f2", 10);
-  task("f3", 10);
+  task("y", 10);
+  task("y", 20);
+  task("y", 30);
 
+  task("f1", 10);
+  task("f1", 20);
+  task("f1", 30);
+
+  task("f2", 10);
+  task("f2", 20);
+  task("f2", 30);
+
+  task("f3", 10);
+  task("f3", 20);
+  task("f3", 30);
   return 0;
 }
