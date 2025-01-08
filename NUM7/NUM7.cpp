@@ -25,7 +25,7 @@ double f3(double x) {
   return -std::log(std::abs(std::sin(M_PI * x) + 0.1)) / 4.0;
 }
 
-double lagrangeInterpolation(double x, std::vector<double> &xPoints, std::vector<double> &yPoints) {
+double lagrangeInterpolation(double x, std::vector<double>& xPoints, std::vector<double>& yPoints) {
   const size_t n = xPoints.size();
   double result = 0.0;
   for (size_t i = 0; i < n; i++) {
@@ -40,43 +40,63 @@ double lagrangeInterpolation(double x, std::vector<double> &xPoints, std::vector
   return result;
 }
 
-std::vector<std::vector<double>> cubicSpline(std::vector<double> &xPoints, std::vector<double> &yPoints, int n) {
-  double h = xPoints[1] - xPoints[0];
+std::vector<double> solveTridiagonalSystem(const std::vector<double>& diagonal,
+                                           const std::vector<double>& subDiagonal,
+                                           const std::vector<double>& superDiagonal,
+                                           const std::vector<double>& rhs) {
+  int n = diagonal.size();
+  std::vector<double> solution(n);
+  std::vector<double> temp_diag = diagonal;
+  std::vector<double> temp_rhs = rhs;
 
-  std::vector<double> epsilons(n, 0.0);
-  for (int i = 1; i < n - 1; i++) {
-    epsilons[i] = 6.0 * (yPoints[i - 1] - 2.0 * yPoints[i] + yPoints[i + 1]) / (h * h);
+  for (int i = 1; i < n; i++) {
+    double factor = subDiagonal[i - 1] / temp_diag[i - 1];
+    temp_diag[i] -= factor * superDiagonal[i - 1];
+    temp_rhs[i] -= factor * temp_rhs[i - 1];
   }
+
+  solution[n - 1] = temp_rhs[n - 1] / temp_diag[n - 1];
+  for (int i = n - 2; i >= 0; i--) {
+    solution[i] = (temp_rhs[i] - superDiagonal[i] * solution[i + 1]) / temp_diag[i];
+  }
+  return solution;
+}
+
+std::map<char, std::vector<double>> cubicSpline(std::vector<double>& xPoints,
+                                                std::vector<double>& yPoints,
+                                                int n) {
+  std::map<char, std::vector<double>> coefficients;
+  double h = xPoints[1] - xPoints[0];
 
   std::vector<double> diagonal(n, 4.0);
   std::vector<double> subDiagonal(n - 1, 1.0);
   std::vector<double> superDiagonal(n - 1, 1.0);
-  diagonal[0] = 1.0;
-  diagonal[n - 1] = 1.0;
+  std::vector<double> rhs(n, 0.0);
 
-  for (int i = 1; i < n; i++) {
-    double factor = subDiagonal[i - 1] / diagonal[i - 1];
-    diagonal[i] -= factor * superDiagonal[i - 1];
-    epsilons[i] -= factor * epsilons[i - 1];
+  diagonal[0] = diagonal[n - 1] = 1.0;
+  for (int i = 1; i < n - 1; i++) {
+    rhs[i] = 6.0 * (yPoints[i - 1] - 2.0 * yPoints[i] + yPoints[i + 1]) / (h * h);
   }
 
-  std::vector<double> M(n, 0.0);
-  M[n - 1] = epsilons[n - 1] / diagonal[n - 1];
-  for (int i = n - 2; i >= 0; i--) {
-    M[i] = (epsilons[i] - superDiagonal[i] * M[i + 1]) / diagonal[i];
-  }
+  std::vector<double> M = solveTridiagonalSystem(diagonal, subDiagonal, superDiagonal, rhs);
 
-  std::vector<std::vector<double>> coefficients(4, std::vector<double>(n - 1, 0.0));
+  coefficients['a'] = std::vector<double>(n - 1);
+  coefficients['b'] = std::vector<double>(n - 1);
+  coefficients['c'] = std::vector<double>(n - 1);
+  coefficients['d'] = std::vector<double>(n - 1);
+
   for (int i = 0; i < n - 1; i++) {
-    coefficients[0][i] = (M[i + 1] - M[i]) / (6.0 * h);
-    coefficients[1][i] = M[i] / 2.0;
-    coefficients[2][i] = (yPoints[i + 1] - yPoints[i]) / h - (h / 6.0) * (2.0 * M[i] + M[i + 1]);
-    coefficients[3][i] = yPoints[i];
+    coefficients['a'][i] = (M[i + 1] - M[i]) / (6.0 * h);
+    coefficients['b'][i] = M[i] / 2.0;
+    coefficients['c'][i] = (yPoints[i + 1] - yPoints[i]) / h - (h / 6.0) * (2.0 * M[i] + M[i + 1]);
+    coefficients['d'][i] = yPoints[i];
   }
+
   return coefficients;
 }
 
-double calculateSpline(double x, std::vector<double> &xPoints, std::vector<std::vector<double>> &coefficients, int n) {
+double calculateSpline(double x, std::vector<double>& xPoints,
+                       std::map<char, std::vector<double>>& coef, int n) {
   int iInterval = n - 2;
   for (int i = 0; i < n - 1; i++) {
     if (x >= xPoints[i] && x <= xPoints[i + 1]) {
@@ -85,15 +105,14 @@ double calculateSpline(double x, std::vector<double> &xPoints, std::vector<std::
     }
   }
 
-  double a = coefficients[0][iInterval];
-  double b = coefficients[1][iInterval];
-  double c = coefficients[2][iInterval];
-  double d = coefficients[3][iInterval];
   double dx = x - xPoints[iInterval];
-  return a * std::pow(dx, 3) + b * std::pow(dx, 2) + c * dx + d;
+  return coef['a'][iInterval] * std::pow(dx, 3) +
+         coef['b'][iInterval] * std::pow(dx, 2) +
+         coef['c'][iInterval] * dx +
+         coef['d'][iInterval];
 }
 
-void task(const std::string &funcName, int N) {
+void task(const std::string& funcName, int N) {
   std::string outputDir = "output";
   std::filesystem::create_directories(outputDir);
 
@@ -151,9 +170,9 @@ void task(const std::string &funcName, int N) {
   plotScript << "set ylabel 'y'\n";
   plotScript << "set grid\n";
 
-  if ((funcName == "y" && N == 30) || (funcName == "f3" && (N == 20 || N == 30))) {
-    plotScript << "set yrange [-2:2]\n";
-  }
+  // if ((funcName == "y" && N == 30) || (funcName == "f3" && (N == 20 || N == 30))) {
+  //   plotScript << "set yrange [-2:2]\n";
+  // }
 
   plotScript << "plot 'exact_" << funcName << "_" << N << ".dat' w l title 'Exact', \\\n"
              << "     'lagrange_" << funcName << "_" << N << ".dat' w l title 'Lagrange', \\\n"

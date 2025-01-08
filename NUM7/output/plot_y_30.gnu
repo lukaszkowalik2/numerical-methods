@@ -4,7 +4,6 @@ set title 'Interpolation for y (N=30)'
 set xlabel 'x'
 set ylabel 'y'
 set grid
-set yrange [-2:2]
 plot 'exact_y_30.dat' w l title 'Exact', \
      'lagrange_y_30.dat' w l title 'Lagrange', \
      'spline_y_30.dat' w l title 'Spline', \
